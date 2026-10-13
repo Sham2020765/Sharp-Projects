@@ -1,82 +1,82 @@
 using System;
+using System.Linq;
 using System.Web.Mvc;
-using YourProjectName.Models;
 
-namespace YourProjectName.Controllers
+namespace CarInsuranceProject.Controllers
 {
     public class InsureeController : Controller
     {
-        private InsuranceEntities db = new InsuranceEntities();
+        private ApplicationDbContext db = new ApplicationDbContext();
 
+        // 1. Admin Action Method requested by the instructor
+        public ActionResult Admin()
+        {
+            var dbQuotes = db.Insurees.ToList(); 
+            return View(dbQuotes);
+        }
+
+        // Index Action Method
+        public ActionResult Index()
+        {
+            return View(db.Insurees.ToList());
+        }
+
+        // Create GET Action Method
+        public ActionResult Create()
+        {
+            return View();
+        }
+
+        // 2. Create POST Action Method with automatic Quote calculation logic
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public ActionResult Create([Bind(Include = "Id,FirstName,LastName,EmailAddress,DateOfBirth,CarYear,CarMake,CarModel,DUI,SpeedingTickets,FullCoverage,Quote")] Insuree insuree)
+        public ActionResult Create([Bind(Include = "Id,FirstName,LastName,EmailAddress,DateOfBirth,CarYear,CarMake,CarModel,DUI,SpeedingTickets,CoverageType,Quote")] Insuree insuree)
         {
             if (ModelState.IsValid)
             {
-                // a. Start with a base of $50 / month
-                decimal monthlyTotal = 50m;
+                // Base quote is $50
+                decimal baseQuote = 50;
 
-                // Calculate age based on DateOfBirth
-                int age = DateTime.Today.Year - insuree.DateOfBirth.Year;
-                if (insuree.DateOfBirth.Date > DateTime.Today.AddYears(-age)) age--;
+                // Calculate exact age
+                int age = DateTime.Now.Year - insuree.DateOfBirth.Year;
+                if (insuree.DateOfBirth.AddYears(age) > DateTime.Now) age--;
 
-                // b. If the user is 18 or under, add $100
-                if (age <= 18)
-                {
-                    monthlyTotal += 100;
-                }
-                // c. If the user is from 19 to 25, add $50
-                else if (age >= 19 && age <= 25)
-                {
-                    monthlyTotal += 50;
-                }
-                // d. If the user is 26 or older, add $25
-                else if (age >= 26)
-                {
-                    monthlyTotal += 25;
-                }
+                // Age logic rules
+                if (age <= 18) baseQuote += 100;
+                else if (age >= 19 && age <= 25) baseQuote += 50;
+                else if (age >= 26) baseQuote += 25;
 
-                // e. If the car's year is before 2000, add $25
-                if (insuree.CarYear < 2000)
-                {
-                    monthlyTotal += 25;
-                }
-                // f. If the car's year is after 2015, add $25
-                else if (insuree.CarYear > 2015)
-                {
-                    monthlyTotal += 25;
-                }
+                // Car year logic rules
+                if (insuree.CarYear < 2000) baseQuote += 25;
+                if (insuree.CarYear > 2015) baseQuote += 25;
 
-                // g. If the car's Make is a Porsche, add $25
-                if (!string.IsNullOrEmpty(insuree.CarMake) && insuree.CarMake.ToLower() == "porsche")
+                // Car make and model logic rules (Porsche / Carrera)
+                if (insuree.CarMake != null && insuree.CarMake.ToLower() == "porsche")
                 {
-                    monthlyTotal += 25;
-
-                    // h. If Make is Porsche and Model is a Carrera, add an additional $25
-                    if (!string.IsNullOrEmpty(insuree.CarModel) && insuree.CarModel.ToLower().Contains("carrera"))
+                    baseQuote += 25;
+                    if (insuree.CarModel != null && insuree.CarModel.ToLower().Contains("carrera"))
                     {
-                        monthlyTotal += 25;
+                        baseQuote += 50;
                     }
                 }
 
-                // i. Add $10 for every speeding ticket
-                monthlyTotal += (insuree.SpeedingTickets * 10);
+                // Speeding tickets rule ($10 per ticket)
+                baseQuote += (insuree.SpeedingTickets * 10);
 
-                // j. If the user has ever had a DUI, add 25% to the total
+                // DUI rule (add 25%)
                 if (insuree.DUI)
                 {
-                    monthlyTotal += (monthlyTotal * 0.25m);
+                    baseQuote = baseQuote * 1.25m;
                 }
 
-                // k. If it's full coverage, add 50% to the total
-                if (insuree.FullCoverage) 
+                // Full coverage rule (add 50%)
+                if (insuree.CoverageType != null && insuree.CoverageType.ToLower() == "full")
                 {
-                    monthlyTotal += (monthlyTotal * 0.50m);
+                    baseQuote = baseQuote * 1.50m;
                 }
 
-                // Assign the calculated total to the Quote property
-                insuree.Quote = monthlyTotal;
+                // Assign the final calculated value to the Quote field
+                insuree.Quote = baseQuote;
 
                 db.Insurees.Add(insuree);
                 db.SaveChanges();
